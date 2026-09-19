@@ -108,7 +108,7 @@ const storeProduct = async () => {
     const formData = new FormData();
     formData.append("name", name.value);
     formData.append("description", description.value);
-    formData.append("price", price.value);
+    formData.append("price", price.value.replace(/\./g, ""));
     formData.append("stock", stock.value);
     formData.append("id_kategori", id_kategori.value);
 

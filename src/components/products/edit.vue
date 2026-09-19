@@ -57,7 +57,7 @@ const fetchDetailProduct = async () => {
 
         name.value = data.name ?? "";
         description.value = data.description ?? "";
-        price.value = data.price != null ? formatPrice(String(data.price).replace(/^Rp\s*/i, "")) : "";
+        price.value = data.price != null ? formatPrice(String(data.price)) : "";
         stock.value = data.stock != null ? String(data.stock) : "";
         id_kategori.value = data.id_kategori != null ? String(data.id_kategori) : "";
         initialValues.value = {
@@ -140,7 +140,7 @@ const updateProduct = async () => {
     const formData = new FormData();
     formData.append("name", name.value);
     formData.append("description", description.value);
-    formData.append("price", price.value);
+    formData.append("price", price.value.replace(/\./g, ""));
     formData.append("stock", stock.value);
     formData.append("id_kategori", id_kategori.value);
     formData.append("_method", "PUT");

@@ -18,6 +18,11 @@ const route = useRoute();
 const products = ref<Product[]>([]);
 const isLoading = ref(true);
 
+const formatCurrency = (value: string | number): string => {
+    const digits = String(value ?? 0).replace(/\D/g, "");
+    return `Rp ${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+};
+
 const fetchDataProducts = async () => {
     isLoading.value = true;
     try {
@@ -165,7 +170,7 @@ onMounted(() => {
                         <td class="px-6 py-4 font-medium text-neutral-900">{{ product.name }}</td>
                         <td class="px-6 py-4 text-neutral-600">{{ product.id_kategori }}</td>
                         <td class="max-w-xs truncate px-6 py-4 text-neutral-600">{{ product.description }}</td>
-                        <td class="px-6 py-4 text-right text-neutral-900">{{ product.price }}</td>
+                        <td class="px-6 py-4 text-right text-neutral-900">{{ formatCurrency(product.price) }}</td>
                         <td class="px-6 py-4 text-right text-neutral-600">{{ product.stock }}</td>
                         <td class="px-6 py-4">
                             <div class="flex items-center justify-end gap-1">
