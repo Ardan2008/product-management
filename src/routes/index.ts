@@ -1,5 +1,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Swal from 'sweetalert2'
+import { getLenis } from '../composables/useLenis'
+import { useTheme } from '../composables/useTheme'
+import { useAuth } from '../stores/auth'
+import { swalTheme } from '../utils/swal'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -51,35 +55,55 @@ const routes: Array<RouteRecordRaw> = [
   }
 ]
 
+const prefersReducedMotion = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, _from, savedPosition) {
+    setTimeout(() => {
+      const lenis = getLenis()
+      const reduced = prefersReducedMotion()
+
+      if (to.hash && !savedPosition) {
+        if (lenis) {
+          lenis.scrollTo(to.hash, { offset: -112, immediate: reduced })
+        } else {
+          document
+            .querySelector(to.hash)
+            ?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
+        }
+        return
+      }
+
+      const top = savedPosition ? savedPosition.top : 0
+      if (lenis) lenis.scrollTo(top, { immediate: true })
+      else window.scrollTo({ top })
+    }, 100)
+
+    return false
+  }
 })
 
 router.beforeEach((to) => {
-  const isAuthenticated = !!localStorage.getItem('crud_token')
+  // baca dari store auth, bukan localStorage langsung, supaya status login di
+  // guard selalu sama dengan yang dilihat komponen
+  const { isAuthenticated } = useAuth()
 
-  // user yang sudah login tidak boleh membuka halaman login / register
-  if ((to.name === 'login' || to.name === 'register') && isAuthenticated) {
+  if ((to.name === 'login' || to.name === 'register') && isAuthenticated.value) {
     return { name: 'home' }
   }
 
-  // halaman yang butuh login — tampilkan popup & alihkan ke login
-  if (to.meta.requiresAuth && !isAuthenticated) {
+  if (to.meta.requiresAuth && !isAuthenticated.value) {
+    const { isDark } = useTheme()
+
     Swal.fire({
+      ...swalTheme(isDark.value),
       icon: 'info',
-      iconColor: '#ffffff',
-      title: 'Login diperlukan',
-      text: 'Silakan login terlebih dahulu untuk mengakses halaman ini.',
-      confirmButtonText: 'Masuk',
-      background: '#0a0a0a',
-      color: '#ffffff',
-      customClass: {
-        popup: 'rounded-2xl! border! border-neutral-700! shadow-2xl!',
-        title: 'text-xl! font-extrabold!',
-        htmlContainer: 'text-sm!',
-        confirmButton: 'rounded-full! bg-white! px-5! py-2.5! text-sm! font-semibold! text-neutral-950! transition!',
-      },
+      title: 'Login required',
+      text: 'Please log in first to access this page.',
+      confirmButtonText: 'Sign in'
     })
 
     return { name: 'login', query: { redirect: to.fullPath } }

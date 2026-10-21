@@ -1,9 +1,21 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft } from "lucide-vue-next";
+import { ArrowLeft, ChevronDown } from "lucide-vue-next";
 import Swal from "sweetalert2";
 import Api from "../../api";
+import ImageUpload from "../common/ImageUpload.vue";
+import { useTheme } from "../../composables/useTheme";
+import { swalProcessing, swalSuccess, swalTheme } from "../../utils/swal";
+import { withSkeletonDuration } from "../../utils/skeleton";
+import { validateProductFields } from "../../utils/validators";
+
+const { isDark } = useTheme();
+
+interface Kategori {
+    id: number;
+    name: string;
+}
 
 interface Errors {
     name?: string[];
@@ -11,6 +23,7 @@ interface Errors {
     price?: string[];
     stock?: string[];
     id_kategori?: string[];
+    image?: string[];
 }
 
 const formatPrice = (value: string): string => {
@@ -23,6 +36,13 @@ const description = ref("");
 const price = ref("");
 const stock = ref("");
 const id_kategori = ref("");
+// file baru pilihan user, belum ada di server
+const image = ref<File | null>(null);
+
+const kategoris = ref<Kategori[]>([]);
+const isLoadingKategori = ref(true);
+// kategori masih diambil, form tampil sebagai skeleton
+const isLoading = ref(true);
 
 const errors = ref<Errors>({});
 const isSubmitting = ref(false);
@@ -30,80 +50,81 @@ const isSubmitting = ref(false);
 const route = useRoute();
 const router = useRouter();
 
-// halaman tujuan balik, default ke /products kalau nggak ada query redirect
+// tujuan balik, default ke /products kalau tidak ada query redirect
 const redirectPath = computed(() => (route.query.redirect as string) || "/products");
 
+const getKategoris = async () => {
+    try {
+        await withSkeletonDuration(async () => {
+            const response = await Api.get("/api/kategoris");
+            kategoris.value = response.data.data ?? response.data;
+        });
+    } catch (error) {
+        console.error("Error fetching categories:", error);
+    } finally {
+        isLoadingKategori.value = false;
+        isLoading.value = false;
+    }
+};
+
+// sama persis dengan edit.vue: abu-abu terang, jadi putih saat focus / error
+const fieldBase =
+    "w-full rounded-xl border px-4 py-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-950 focus:bg-white focus:ring-4 focus:ring-neutral-950/5 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-100 dark:focus:bg-neutral-900 dark:focus:ring-neutral-100/10";
+const fieldClass = (invalid?: boolean) => [
+    fieldBase,
+    invalid
+        ? "border-neutral-950 bg-white dark:border-neutral-100 dark:bg-neutral-900"
+        : "border-neutral-200 bg-neutral-50 hover:border-neutral-300 hover:bg-neutral-100/70 dark:border-neutral-800 dark:bg-neutral-800/50 dark:hover:border-neutral-700 dark:hover:bg-neutral-800",
+];
+
+// aturan produk dipakai bersama dengan edit.vue supaya keduanya tidak berbeda
 const validate = () => {
-    errors.value = {};
-    let hasError = false;
+    const found = validateProductFields({
+        name: name.value,
+        description: description.value,
+        price: price.value,
+        stock: stock.value,
+        id_kategori: id_kategori.value,
+    });
 
-    if (!name.value) {
-        errors.value.name = ["The name field is required."];
-        hasError = true;
-    }
-    if (!description.value) {
-        errors.value.description = ["The description field is required."];
-        hasError = true;
-    }
-    if (!price.value) {
-        errors.value.price = ["The price field is required."];
-        hasError = true;
-    } else {
-        const pricePattern = /^\d{1,3}(\.\d{3})*$/;
-        if (!pricePattern.test(price.value)) {
-            errors.value.price = ["The price format is invalid. Use Rupiah format, e.g. 80.000."];
-            hasError = true;
-        }
-    }
-    if (!stock.value) {
-        errors.value.stock = ["The stock field is required."];
-        hasError = true;
-    }
+    errors.value = found as Errors;
+    return Object.keys(found).length === 0;
+};
 
-    return !hasError;
+// error sebuah field dibuang saat user mulai mengoreksinya, supaya tidak nyangkut
+const clearFieldError = (field: keyof Errors) => {
+    if (!errors.value[field]) return;
+
+    const next = { ...errors.value };
+    delete next[field];
+    errors.value = next;
+};
+
+const onPriceInput = (event: Event) => {
+    price.value = formatPrice((event.target as HTMLInputElement).value);
+    clearFieldError("price");
 };
 
 const storeProduct = async () => {
     if (!validate()) return;
 
-    // Popup konfirmasi dulu sebelum benar-benar submit
+    // popup konfirmasi dulu sebelum benar-benar submit
     const confirm = await Swal.fire({
-        title: "Simpan product ini?",
-        html: `Kamu akan menambahkan product <b>"${name.value}"</b> ke daftar product.`,
+        ...swalTheme(isDark.value),
+        title: "Save this product?",
+        html: `You are about to add the product <b>"${name.value}"</b> to the product list.`,
         icon: "question",
-        iconColor: "#171717",
-        color: "#171717",
         showCancelButton: true,
-        confirmButtonText: "Ya, simpan",
-        cancelButtonText: "Batal",
+        confirmButtonText: "Yes, save",
+        cancelButtonText: "Cancel",
         reverseButtons: true,
         focusCancel: true,
         buttonsStyling: false,
-        customClass: {
-            popup: "rounded-2xl! border! border-neutral-200! shadow-xl!",
-            title: "text-xl! font-extrabold! text-neutral-950!",
-            htmlContainer: "text-sm! leading-relaxed! text-neutral-600!",
-            actions: "gap-2.5!",
-            confirmButton: "rounded-full! bg-neutral-950! px-5! py-2.5! text-sm! font-semibold! text-white! transition hover:bg-neutral-800!",
-            cancelButton: "rounded-full! border! border-neutral-300! bg-white! px-5! py-2.5! text-sm! font-semibold! text-neutral-950! transition hover:bg-neutral-100!",
-        },
     });
 
     if (!confirm.isConfirmed) return;
 
-    Swal.fire({
-        title: "Menyimpan...",
-        text: "Mohon tunggu sebentar.",
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => Swal.showLoading(),
-        customClass: {
-            popup: "rounded-2xl! border! border-neutral-200! shadow-xl!",
-            title: "text-xl! font-extrabold! text-neutral-950!",
-            htmlContainer: "text-sm! leading-relaxed! text-neutral-600!",
-        },
-    });
+    swalProcessing(isDark.value, "Saving...", "One moment, please.");
 
     const formData = new FormData();
     formData.append("name", name.value);
@@ -111,24 +132,18 @@ const storeProduct = async () => {
     formData.append("price", price.value.replace(/\./g, ""));
     formData.append("stock", stock.value);
     formData.append("id_kategori", id_kategori.value);
+    if (image.value) {
+        formData.append("image", image.value);
+    }
 
     isSubmitting.value = true;
     try {
         await Promise.all([Api.post("/api/products", formData), new Promise((r) => setTimeout(r, 1000))]);
 
-        await Swal.fire({
-            title: "Berhasil!",
-            text: "Product baru berhasil ditambahkan.",
-            icon: "success",
-            iconColor: "#171717",
-            color: "#171717",
+        await swalSuccess(isDark.value, {
+            title: "Success!",
+            text: "The new product has been added.",
             timer: 1500,
-            showConfirmButton: false,
-            customClass: {
-                popup: "rounded-2xl! border! border-neutral-200! shadow-xl!",
-                title: "text-xl! font-extrabold! text-neutral-950!",
-                htmlContainer: "text-sm! leading-relaxed! text-neutral-600!",
-            },
         });
 
         router.push(redirectPath.value);
@@ -138,114 +153,173 @@ const storeProduct = async () => {
         }
 
         Swal.fire({
-            title: "Gagal!",
-            text: "Terjadi kesalahan saat menambahkan product.",
+            ...swalTheme(isDark.value),
+            title: "Failed!",
+            text: "Something went wrong while adding the product.",
             icon: "error",
-            iconColor: "#dc2626",
-            color: "#171717",
             confirmButtonText: "Oke",
             buttonsStyling: false,
-            customClass: {
-                popup: "rounded-2xl! border! border-neutral-200! shadow-xl!",
-                title: "text-xl! font-extrabold! text-neutral-950!",
-                htmlContainer: "text-sm! leading-relaxed! text-neutral-600!",
-                actions: "gap-2.5!",
-                confirmButton: "rounded-full! bg-neutral-950! px-5! py-2.5! text-sm! font-semibold! text-white! transition hover:bg-neutral-800!",
-            },
         });
     } finally {
         isSubmitting.value = false;
     }
 };
+
+onMounted(getKategoris);
 </script>
 
 <template>
-    <div class="mx-auto max-w-2xl px-4 py-10">
+    <div class="mx-auto max-w-5xl px-4 py-10">
 
-        <router-link
-            :to="redirectPath"
-            class="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 transition hover:text-neutral-950"
-        >
-            <ArrowLeft :size="16" />
-            Back
-        </router-link>
-
-        <h1 class="mt-4 text-2xl font-bold tracking-tight text-neutral-950">
-            Add new product
-        </h1>
-
-        <form @submit.prevent="storeProduct" class="mt-8 space-y-5 rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8">
-
-            <div>
-                <label class="mb-1.5 block text-sm font-medium text-neutral-800">Name</label>
-                <input
-                    type="text"
-                    v-model="name"
-                    placeholder="Product name"
-                    class="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-100"
-                />
-                <p v-if="errors.name" class="mt-1.5 text-xs text-neutral-500">{{ errors.name[0] }}</p>
-            </div>
-
-            <div>
-                <label class="mb-1.5 block text-sm font-medium text-neutral-800">Category</label>
-                <select
-                    v-model="id_kategori"
-                    class="w-full rounded-lg border border-neutral-200 py-2.5 pl-3.5 pr-9 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-100"
-                >
-                    <option value="">Select category</option>
-                    <option value="1">Category 1</option>
-                    <option value="2">Category 2</option>
-                    <option value="3">Category 3</option>
-                    <option value="4">Category 4</option>
-                    <option value="5">Category 5</option>
-                </select>
-                <p v-if="errors.id_kategori" class="mt-1.5 text-xs text-neutral-500">{{ errors.id_kategori[0] }}</p>
-            </div>
-
-            <div>
-                <label class="mb-1.5 block text-sm font-medium text-neutral-800">Description</label>
-                <textarea
-                    v-model="description"
-                    rows="5"
-                    placeholder="Product description"
-                    class="w-full resize-none rounded-lg border border-neutral-200 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-100"
-                ></textarea>
-                <p v-if="errors.description" class="mt-1.5 text-xs text-neutral-500">{{ errors.description[0] }}</p>
-            </div>
-
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                    <label class="mb-1.5 block text-sm font-medium text-neutral-800">Price</label>
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        :value="price"
-                        @input="price = formatPrice(($event.target as HTMLInputElement).value)"
-                        placeholder="0"
-                        class="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-100"
-                    />
-                    <p v-if="errors.price" class="mt-1.5 text-xs text-neutral-500">{{ errors.price[0] }}</p>
-                </div>
-                <div>
-                    <label class="mb-1.5 block text-sm font-medium text-neutral-800">Stock</label>
-                    <input
-                        type="number"
-                        v-model="stock"
-                        placeholder="0"
-                        class="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-100"
-                    />
-                    <p v-if="errors.stock" class="mt-1.5 text-xs text-neutral-500">{{ errors.stock[0] }}</p>
-                </div>
-            </div>
-
-            <button
-                type="submit"
-                :disabled="isSubmitting"
-                class="w-full rounded-full bg-neutral-950 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+        <div class="flex items-center gap-4">
+            <router-link
+                :to="redirectPath"
+                title="Back"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 transition hover:border-neutral-300 hover:text-neutral-950 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-50"
             >
-                {{ isSubmitting ? "Saving..." : "Save product" }}
-            </button>
+                <ArrowLeft :size="18" />
+            </router-link>
+            <div class="min-w-0">
+                <h1 class="text-2xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50">Add new product</h1>
+                <p class="mt-0.5 truncate text-sm text-neutral-500 dark:text-neutral-400">
+                    <template v-if="isLoading">Loading categories...</template>
+                    <template v-else>Fill in the details to add a product to the catalogue.</template>
+                </p>
+            </div>
+        </div>
+
+        <div v-if="isLoading" class="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-5">
+            <div class="space-y-6 rounded-3xl border border-neutral-200 bg-white p-6 sm:p-8 lg:col-span-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <div class="h-4 w-28 animate-pulse rounded-full bg-neutral-100 dark:bg-neutral-800" />
+                <div class="h-12 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
+                <div class="h-32 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
+                <div class="grid grid-cols-2 gap-5">
+                    <div class="h-12 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
+                    <div class="h-12 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800" />
+                </div>
+            </div>
+            <div class="space-y-6 lg:col-span-2">
+                <div class="h-56 animate-pulse rounded-3xl bg-neutral-100 dark:bg-neutral-800" />
+                <div class="h-24 animate-pulse rounded-3xl bg-neutral-100 dark:bg-neutral-800" />
+            </div>
+        </div>
+
+        <form v-else @submit.prevent="storeProduct" class="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-5">
+
+            <section class="space-y-6 rounded-3xl border border-neutral-200 bg-white p-6 sm:p-8 lg:col-span-3 dark:border-neutral-800 dark:bg-neutral-900">
+                <h2 class="text-sm font-semibold text-neutral-950 dark:text-neutral-50">Product details</h2>
+
+                <div>
+                    <label for="name" class="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Name</label>
+                    <input
+                        id="name"
+                        type="text"
+                        v-model="name"
+                        placeholder="e.g. Caffe Latte"
+                        :class="fieldClass(!!errors.name)"
+                        @input="clearFieldError('name')"
+                    />
+                    <p v-if="errors.name" class="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">{{ errors.name[0] }}</p>
+                </div>
+
+                <div>
+                    <label for="description" class="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Description</label>
+                    <textarea
+                        id="description"
+                        v-model="description"
+                        rows="5"
+                        placeholder="Describe the product in a sentence or two"
+                        :class="[fieldClass(!!errors.description), 'resize-none leading-relaxed']"
+                        @input="clearFieldError('description')"
+                    ></textarea>
+                    <p v-if="errors.description" class="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">{{ errors.description[0] }}</p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <div>
+                        <label for="price" class="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Price</label>
+                        <div class="relative">
+                            <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-neutral-400 dark:text-neutral-500">Rp</span>
+                            <input
+                                id="price"
+                                type="text"
+                                inputmode="numeric"
+                                :value="price"
+                                @input="onPriceInput"
+                                placeholder="0"
+                                :class="[fieldClass(!!errors.price), 'pl-11']"
+                            />
+                        </div>
+                        <p v-if="errors.price" class="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">{{ errors.price[0] }}</p>
+                    </div>
+                    <div>
+                        <label for="stock" class="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Stock</label>
+                        <input
+                            id="stock"
+                            type="number"
+                            min="0"
+                            v-model="stock"
+                            placeholder="0"
+                            :class="fieldClass(!!errors.stock)"
+                            @input="clearFieldError('stock')"
+                        />
+                        <p v-if="errors.stock" class="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">{{ errors.stock[0] }}</p>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="space-y-6 lg:sticky lg:top-6 lg:col-span-2">
+                <div class="rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+                    <ImageUpload
+                        :model-value="image"
+                        label="Image"
+                        :error="errors.image?.[0]"
+                        :disabled="isSubmitting"
+                        @update:model-value="image = $event"
+                    />
+                </div>
+
+                <div class="rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+                    <label for="category" class="mb-2 block text-sm font-medium text-neutral-800 dark:text-neutral-200">Category</label>
+                    <div class="relative">
+                        <select
+                            id="category"
+                            v-model="id_kategori"
+                            :disabled="isLoadingKategori"
+                            :class="[fieldClass(!!errors.id_kategori), 'cursor-pointer appearance-none pr-10 disabled:cursor-not-allowed disabled:opacity-60']"
+                            @change="clearFieldError('id_kategori')"
+                        >
+                            <option value="">Select category</option>
+                            <option
+                                v-for="kategori in kategoris"
+                                :key="kategori.id"
+                                :value="String(kategori.id)"
+                                class="bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100"
+                            >
+                                {{ kategori.name }}
+                            </option>
+                        </select>
+                        <ChevronDown :size="16" class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500" />
+                    </div>
+                    <p v-if="errors.id_kategori" class="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">{{ errors.id_kategori[0] }}</p>
+                </div>
+
+                <div class="flex flex-col gap-2.5">
+                    <button
+                        type="submit"
+                        :disabled="isSubmitting"
+                        class="w-full rounded-full bg-neutral-950 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-500"
+                    >
+                        {{ isSubmitting ? "Saving..." : "Save product" }}
+                    </button>
+                    <router-link
+                        :to="redirectPath"
+                        class="w-full rounded-full border border-neutral-200 bg-white py-3 text-center text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 hover:text-neutral-950 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50"
+                    >
+                        Cancel
+                    </router-link>
+                </div>
+            </aside>
 
         </form>
     </div>

@@ -62,7 +62,6 @@ const login = async (email: string, password: string): Promise<AuthUser> => {
 }
 
 const register = async (payload: RegisterPayload): Promise<AuthUser> => {
-    // hanya buat akun, tidak langsung login — user diarahkan ke halaman login
     const { data } = await Api.post('/api/auth/register', payload)
     return data.data.user
 }
@@ -71,7 +70,7 @@ const logout = async () => {
     try {
         await Api.post('/api/auth/logout')
     } catch {
-        // abaikan error logout di sisi server
+        // tetap logout lokal walau server gagal merespons
     }
     token.value = null
     user.value = null

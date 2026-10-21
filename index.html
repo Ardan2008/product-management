@@ -2,11 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Product Management</title>
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta
+      name="description"
+      content="Orvella — roastery &amp; cafe. Single origin beans from partner farms, roasted in small batches three times a week and brewed fresh every day."
+    />
+    <title>Orvella Coffee — Single Origin Coffee $amp; Specialty Coffee</title>
+
+    <!-- terapkan tema tersimpan sebelum halaman dirender agar tidak ada kedipan warna -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('crud_theme')
+          var dark = stored
+            ? stored === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+
+          if (dark) {
+            document.documentElement.classList.add('dark')
+            document.documentElement.style.colorScheme = 'dark'
+            document.documentElement.style.backgroundColor = '#0a0a0a'
+          }
+
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', dark ? '#0a0a0a' : '#fafafa')
+        } catch (e) {}
+      })()
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-gray-100">  
+
+  <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,24 +1,223 @@
 @import "tailwindcss";
+@import 'lenis/dist/lenis.css';
 
-/* ===== SweetAlert2 — beberapa penyesuaian kecil pada ikon =====
-   Layout popup, jarak, tombol: semuanya lewat class Tailwind di option customClass.
-   JANGAN override animasi .swal2-popup, nanti animasi close (swal2-hide) rusak
-   dan popup tidak mau hilang saat tombol "Batal" ditekan. */
+/* Mode gelap.
+   Tailwind v4 mengikat `dark:` ke `prefers-color-scheme`; kita kendalikan lewat
+   class di <html> supaya user bisa menimpa pengaturan sistem. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-.swal2-icon.swal2-question {
-    border-color: #0a0a0a;
-    color: #0a0a0a;
+/* Token brand Orvella.
+   Monokrom: semua warna memakai netral bawaan Tailwind, hanya font yang diganti. */
+
+@theme {
+    --font-display: "Fraunces", ui-serif, Georgia, serif;
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Token permukaan level aplikasi: hanya untuk yang ada di luar component tree
+   (background halaman, widget native, SweetAlert2). Komponen tetap memakai
+   skala netral Tailwind. */
+:root {
+    --app-bg: #fafafa;
+    --app-surface: #ffffff;
+    --app-text: #0a0a0a;
+    --app-text-muted: #737373;
+    --app-border: #e5e5e5;
+    --app-input-bg: #fafafa;
+    --app-hover-bg: #f5f5f5;
+}
+
+.dark {
+    --app-bg: #0a0a0a;
+    --app-surface: #171717;
+    --app-text: #fafafa;
+    --app-text-muted: #a3a3a3;
+    --app-border: #262626;
+    --app-input-bg: #1a1a1a;
+    --app-hover-bg: #262626;
+}
+
+/* Smooth scroll untuk anchor link di halaman utama */
+
+html {
+    scroll-behavior: smooth;
+    background-color: var(--app-bg);
+}
+
+body {
+    background-color: var(--app-bg);
+    color: var(--app-text);
+}
+
+/* cegah halaman berkedip putih sebelum Vue mount */
+html.dark body {
+    background-color: var(--app-bg);
+}
+
+/* Blur reveal (dikendalikan oleh directive v-reveal).
+   Elemen masuk ke viewport dalam kondisi blur dan sedikit lebih rendah, lalu
+   perlahan menjadi tajam. Delay per elemen diambil dari --reveal-delay supaya
+   bisa ditampilkan bertahap. */
+
+.reveal {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(22px);
+    transition:
+        opacity 0.7s ease var(--reveal-delay, 0ms),
+        filter 0.7s ease var(--reveal-delay, 0ms),
+        transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+    will-change: opacity, filter, transform;
+}
+
+.reveal.is-revealed {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .reveal {
+        opacity: 1;
+        filter: none;
+        transform: none;
+        transition: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* SweetAlert2 — semua ikon dipaksa monokrom (hitam/putih).
+   Layout, spasi, dan tombol popup semuanya dari class Tailwind pada customClass.
+   JANGAN menimpa animasi .swal2-popup: itu merusak animasi menutup (swal2-hide)
+   sehingga popup tidak mau hilang saat tombol ditekan. Warna tiap popup berasal
+   dari `swalTheme()` di utils/swal.ts.
+
+   Warna dasar tiap tipe ikon ditulis SweetAlert2 sebagai inline style, jadi harus
+   ditimpa lewat `!important` supaya benar-benar mengikuti tema. */
+.swal2-icon {
+    color: var(--app-text) !important;
+    border-color: var(--app-text) !important;
+}
+
+/* garis centik success ikut warna teks tema */
 .swal2-icon.swal2-success [class^='swal2-success-line'] {
-    background-color: #0a0a0a;
+    background-color: var(--app-text) !important;
 }
 
+/* ring yang mengelilingi centak: dibuat solid mengikuti warna teks tema
+   (hitam di light, putih di dark) supaya tidak transparan seperti bawaan */
 .swal2-icon.swal2-success .swal2-success-ring {
-    border-color: #e5e5e5;
+    border-color: var(--app-text) !important;
+    opacity: 1;
 }
 
-.swal2-icon.swal2-error {
-    border-color: #dc2626;
-    color: #dc2626;
+/* "x" pada error/warning mengikuti warna teks tema */
+.swal2-icon.swal2-error [class^='swal2-x-line'],
+.swal2-icon.swal2-warning [class^='swal2-warning-line'] {
+    background-color: var(--app-text) !important;
+}
+
+/* spinner popup proses */
+.swal2-loader {
+    border-color: var(--app-text) transparent var(--app-text) transparent !important;
+}
+
+/* Fokus keyboard pada grup tombol navigasi panah (modal profile).
+   Penanda fokus memakai atribut `data-kb-focus` yang dipasang navigateButtons()
+   di views/profile.vue, bukan `:focus-visible` — setelah `.focus()` dari handler
+   keydown, beberapa browser tidak menganggap elemen itu focus-visible sehingga
+   ring tidak pernah tampil.
+
+   Warna outline dikirim sebagai inline style dari profile.vue (kbOutline) supaya
+   selalu mengikuti tema; file ini hanya mengatur ketebalannya. */
+.kb-btn-cancel[data-kb-focus],
+.kb-btn-primary[data-kb-focus] {
+    outline-style: solid;
+    outline-width: 3px;
+    outline-offset: 3px;
+}
+
+/* Toggle mode gelap / terang */
+
+/* ikon ditukar dengan v-if, jadi keyframe diputar ulang setiap toggle */
+@keyframes theme-swap {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+
+    45% {
+        transform: rotate(200deg) scale(0.65);
+    }
+
+    70% {
+        transform: rotate(345deg) scale(1.15);
+    }
+
+    100% {
+        transform: rotate(360deg) scale(1);
+    }
+}
+
+.theme-toggle-icon {
+    animation: theme-swap 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* getar singkat saat submit ditolak oleh validasi */
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-6px);
+    }
+
+    40% {
+        transform: translateX(6px);
+    }
+
+    60% {
+        transform: translateX(-4px);
+    }
+
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+.shake {
+    animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* pesan error masuk perlahan dari atas */
+@keyframes feedback-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.field-feedback {
+    animation: feedback-in 0.18s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .shake,
+    .field-feedback,
+    .theme-toggle-icon {
+        animation: none;
+    }
 }
